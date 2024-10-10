@@ -14,11 +14,11 @@ data_storage = {'knee_angle': [], 'femur_angle': [], 'timestamps': []}
 cap = None  # Global cap variable for camera
 
 # Initialize ArUco Dictionary
-aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
+aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
 aruco_params = cv2.aruco.DetectorParameters()
 
 # Generate a marker (Incorporated from Notebook)
-marker_id = 42
+marker_id = 1
 marker_size = 200  # Size in pixels
 marker_image = cv2.aruco.generateImageMarker(aruco_dict, marker_id, marker_size)
 cv2.imwrite('/mnt/data/marker_42.png', marker_image)
