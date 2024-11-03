@@ -7,12 +7,13 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 import time
 from collections import deque
+import winsound
 
 # Global Variables
 squat_count = 0
 measurement_active = False
 sound_enabled = False
-data_storage = {'hip_angle': [], 'knee_angle': [], 'timestamps': []}
+data_storage = {'femur_angle': [], 'knee_angle': [], 'timestamps': []}
 cap = None  # Global cap variable for camera
 rep_state = "up"  # Used to track whether the squat is in the 'up' or 'down' phase
 
@@ -86,6 +87,11 @@ def find_markers(frame):
                 last_valid_marker_positions[marker_id] = position  # Letzte gültige Position aktualisieren
         cv2.aruco.drawDetectedMarkers(frame, corners, ids)
 
+    # Verwende die zuletzt gültigen Positionen, wenn Marker nicht erkannt werden
+    for marker_id in [1, 12, 123]:
+        if marker_id not in marker_positions and marker_id in last_valid_marker_positions:
+            marker_positions[marker_id] = last_valid_marker_positions[marker_id]
+
     # Wenn alle relevanten Marker erkannt wurden, zeichne Vektoren (Linien) zwischen ihnen
     if 1 in marker_positions and 12 in marker_positions:
         hip_pos = tuple(map(int, marker_positions[1]))  # Hüftposition
@@ -110,16 +116,17 @@ def measurement_loop():
     ret, frame = cap.read()
     if ret:
         marker_positions, frame = find_markers(frame)
-        femur_angle = calculate_femur_angle(marker_positions)
+        femur_angle, knee_angle = calculate_angles(marker_positions)
         update_marker_status(marker_positions)
 
         if femur_angle is not None:
             current_time = time.time()
-            data_storage['hip_angle'].append(femur_angle)  # Speichere den Femur-Winkel für spätere Analysen
+            data_storage['femur_angle'].append(femur_angle)  # Speichere den Femur-Winkel für spätere Analysen
+            data_storage['knee_angle'].append(knee_angle)  # Speichere den Knie-Winkel für spätere Analysen
             data_storage['timestamps'].append(current_time)
 
             # Debugging: Ausgabe der aktuellen Werte zur Überwachung
-            print(f"Femur Angle: {femur_angle}, Rep State: {rep_state}, Squat Count: {squat_count}")
+            print(f"Femur Angle: {femur_angle}, Knee Angle: {knee_angle}, Rep State: {rep_state}, Squat Count: {squat_count}")
 
             # Zählerlogik basierend auf dem Femur-Winkel relativ zur unteren Frame-Kante
             if femur_angle <= 90:  # Wenn der Oberschenkel parallel oder tiefer als die horizontale Achse ist
@@ -134,7 +141,14 @@ def measurement_loop():
                     update_squat_count_label()
                     print(f"Squat counted! New count: {squat_count}")
                     if sound_enabled:
-                        print("Beep!")  # Placeholder für den Ton
+                    
+                        if sound_enabled:
+                            # Additional sound options can be added here
+                            # For example, using the winsound module on Windows:
+                            winsound.Beep(1000, 200)  # Beep at 1000 Hz for 200 ms
+                            # Or using the playsound module:
+                            # from playsound import playsound
+                            # playsound('path_to_sound_file.mp3')
             update_visualization()
 
         # Konvertiere das Frame in ein Tkinter-kompatibles Format und aktualisiere das Label
@@ -161,7 +175,7 @@ def update_marker_status(marker_positions):
 def start_measurement():
     global measurement_active, cap
     measurement_active = True
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
     if not cap.isOpened():
         print("Cannot open camera")
         return
@@ -187,9 +201,9 @@ def update_squat_count_label():
     squat_count_label.config(text=f"Squat Count: {squat_count}")
 
 def update_visualization():
-    hip_angle_line.set_ydata(data_storage['hip_angle'][-10:])
+    hip_angle_line.set_ydata(data_storage['femur_angle'][-10:])
     knee_angle_line.set_ydata(data_storage['knee_angle'][-10:])
-    hip_angle_line.set_xdata(range(len(data_storage['hip_angle'][-10:])))
+    hip_angle_line.set_xdata(range(len(data_storage['femur_angle'][-10:])))
     knee_angle_line.set_xdata(range(len(data_storage['knee_angle'][-10:])))
     
     ax.relim()
@@ -250,7 +264,7 @@ ax.set_ylim(0, 180)
 ax.set_xlim(0, 10)
 ax.set_ylabel('Angle (degrees)')
 ax.set_xlabel('Time (frames)')
-hip_angle_line, = ax.plot([], [], label='Hip Angle', color='blue')
+hip_angle_line, = ax.plot([], [], label=' Angle', color='blue')
 knee_angle_line, = ax.plot([], [], label='Knee Angle', color='red')
 ax.legend()
 
