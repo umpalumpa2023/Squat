@@ -72,39 +72,53 @@ def calculate_femur_angle(marker_positions):
 
 last_valid_marker_positions = {}  # Zuletzt gültige Marker-Positionen
 
+# Initialize frame counters for each marker
+marker_timeout_frames = {1: 0, 12: 0, 123: 0}  # To count frames since each marker was last detected
+max_timeout = 10  # Number of frames to keep the last position before removing it
+
 def find_markers(frame):
+    global marker_timeout_frames
+    
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     corners, ids, _ = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
-
+    
     marker_positions = {}
 
+    # Reset frame counters for detected markers and update their positions
     if ids is not None:
         for i, corner in enumerate(corners):
             marker_id = ids[i][0]
-            if marker_id in [1, 12, 123]:  # Marker 1, 12 und 123 sind relevant
+            if marker_id in [1, 12, 123]:  # Relevant markers
                 position = np.mean(corner[0], axis=0)
                 marker_positions[marker_id] = position
-                last_valid_marker_positions[marker_id] = position  # Letzte gültige Position aktualisieren
+                last_valid_marker_positions[marker_id] = position  # Update last valid position
+                marker_timeout_frames[marker_id] = 0  # Reset timeout for this marker
         cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-
-    # Verwende die zuletzt gültigen Positionen, wenn Marker nicht erkannt werden
+    
+    # Increase timeout counters for markers that were not detected
     for marker_id in [1, 12, 123]:
-        if marker_id not in marker_positions and marker_id in last_valid_marker_positions:
-            marker_positions[marker_id] = last_valid_marker_positions[marker_id]
+        if marker_id not in marker_positions:
+            marker_timeout_frames[marker_id] += 1  # Increment timeout counter
+            # Only keep the last valid position if the marker hasn't timed out
+            if marker_timeout_frames[marker_id] <= max_timeout and marker_id in last_valid_marker_positions:
+                marker_positions[marker_id] = last_valid_marker_positions[marker_id]
+        else:
+            marker_timeout_frames[marker_id] = 0  # Reset if detected
 
-    # Wenn alle relevanten Marker erkannt wurden, zeichne Vektoren (Linien) zwischen ihnen
-    if 1 in marker_positions and 12 in marker_positions:
-        hip_pos = tuple(map(int, marker_positions[1]))  # Hüftposition
-        knee_pos = tuple(map(int, marker_positions[12]))  # Knieposition
-        cv2.line(frame, hip_pos, knee_pos, (0, 255, 0), 2)  # Linie zwischen Hüfte und Knie (grün)
+    # Draw lines between markers only if they are currently detected or within the timeout
+    if 1 in marker_positions and marker_positions[1] is not None and \
+       12 in marker_positions and marker_positions[12] is not None:
+        hip_pos = tuple(map(int, marker_positions[1]))  # Hip position
+        knee_pos = tuple(map(int, marker_positions[12]))  # Knee position
+        cv2.line(frame, hip_pos, knee_pos, (0, 255, 0), 2)  # Line between hip and knee (green)
 
-    if 12 in marker_positions and 123 in marker_positions:
-        knee_pos = tuple(map(int, marker_positions[12]))  # Knieposition
-        ankle_pos = tuple(map(int, marker_positions[123]))  # Sprunggelenkposition
-        cv2.line(frame, knee_pos, ankle_pos, (0, 0, 255), 2)  # Linie zwischen Knie und Sprunggelenk (rot)
+    if 12 in marker_positions and marker_positions[12] is not None and \
+       123 in marker_positions and marker_positions[123] is not None:
+        knee_pos = tuple(map(int, marker_positions[12]))  # Knee position
+        ankle_pos = tuple(map(int, marker_positions[123]))  # Ankle position
+        cv2.line(frame, knee_pos, ankle_pos, (0, 0, 255), 2)  # Line between knee and ankle (red)
 
-    return marker_positions, frame
-
+    return marker_positions,frame
 
 
 def measurement_loop():
