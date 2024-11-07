@@ -197,6 +197,10 @@ def stop_measurement():
     if cap:
         cap.release()
         cv2.destroyAllWindows()
+    
+    # Clear the camera_label by setting it to an empty image
+    camera_label.config(image='')  # This will effectively "refresh" the GUI to look empty
+
 
 def reset_counter():
     global squat_count
