@@ -73,11 +73,6 @@ def calculate_femur_angle(marker_positions):
 
 last_valid_marker_positions = {}  # Zuletzt gültige Marker-Positionen
 
-
-# Initialize frame counters for each marker
-marker_timeout_frames = {1: 0, 12: 0, 123: 0}  # To count frames since each marker was last detected
-max_timeout = 10  # Number of frames to keep the last position before removing it
-
 # Initialize frame counters for each marker
 marker_timeout_frames = {1: 0, 12: 0, 123: 0}  # To count frames since each marker was last detected
 max_timeout = 10  # Number of frames to keep the last position before removing it
@@ -124,8 +119,7 @@ def find_markers(frame):
         ankle_pos = tuple(map(int, marker_positions[123]))  # Ankle position
         cv2.line(frame, knee_pos, ankle_pos, (0, 0, 255), 2)  # Line between knee and ankle (red)
 
-    return marker_positions, frame
-
+    return marker_positions,frame
 
 
 def measurement_loop():
