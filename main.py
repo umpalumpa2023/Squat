@@ -9,6 +9,7 @@ import time
 from collections import deque
 import winsound
 
+
 # ==========================
 # Global Variables
 # ==========================
@@ -33,6 +34,10 @@ last_valid_marker_positions = {}
 # Initialize frame counters for each marker
 marker_timeout_frames = {1: 0, 12: 0, 123: 0}  # To count frames since each marker was last detected
 max_timeout = 15  # Number of frames to keep the last position before removing it
+
+
+handlebar_traveled_distance = [0.0]  # List to store distance over time, starts at 0
+last_handlebar_position = None  # Store last valid handlebar position
 
 # Define the sampling rate (frames per second)
 fps = 30  # Adjust this value according to your actual  data sampling rate
@@ -71,50 +76,38 @@ def calculate_angles(marker_positions):
 # Functions for Marker Detection
 # ==========================
 def find_markers(frame):
-    global marker_timeout_frames
-    
+    global handlebar_traveled_distance, last_handlebar_position
+
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     corners, ids, _ = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
-    
+
     marker_positions = {}
 
-    # Reset frame counters for detected markers and update their positions
     if ids is not None:
         for i, corner in enumerate(corners):
             marker_id = ids[i][0]
-            if marker_id in [1, 12, 123]:  # Relevant markers
+            if marker_id in [1, 12, 123, 2]:  # Relevant markers
                 position = np.mean(corner[0], axis=0)
                 marker_positions[marker_id] = position
-                last_valid_marker_positions[marker_id] = position  # Update last valid position
-                marker_timeout_frames[marker_id] = 0  # Reset timeout for this marker
         cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-    
-    # Increase timeout counters for markers that were not detected
-    for marker_id in [1, 12, 123]:
-        if marker_id not in marker_positions:
-            marker_timeout_frames[marker_id] += 1  # Increment timeout counter
-            # Only keep the last valid position if the marker hasn't timed out
-            if marker_timeout_frames[marker_id] <= max_timeout and marker_id in last_valid_marker_positions:
-                marker_positions[marker_id] = last_valid_marker_positions[marker_id]
-        else:
-            marker_timeout_frames[marker_id] = 0  # Reset if detected
 
-    # Draw lines between markers only if they are currently detected or within the timeout
-    if 1 in marker_positions and marker_positions[1] is not None and \
-       12 in marker_positions and marker_positions[12] is not None:
-        hip_pos = tuple(map(int, marker_positions[1]))  # Hip position
-        knee_pos = tuple(map(int, marker_positions[12]))  # Knee position
-        cv2.line(frame, hip_pos, knee_pos, (0, 255, 0), 2)  # Line between hip and knee (green)
+    # Handlebar movement calculation for Marker 2
+    if 2 in marker_positions:
+        current_handlebar_position = marker_positions[2]
 
-    if 12 in marker_positions and marker_positions[12] is not None and \
-       123 in marker_positions and marker_positions[123] is not None:
-        knee_pos = tuple(map(int, marker_positions[12]))  # Knee position
-        ankle_pos = tuple(map(int, marker_positions[123]))  # Ankle position
-        cv2.line(frame, knee_pos, ankle_pos, (0, 0, 255), 2)  # Line between knee and ankle (red)
+        if last_handlebar_position is not None:
+            # Calculate vertical movement (change in y-axis)
+            vertical_distance = current_handlebar_position[1] - last_handlebar_position[1]
+            cm_per_pixel = 8 / np.linalg.norm(corners[ids.tolist().index([2])][0][0] - corners[ids.tolist().index([2])][0][1])  # Conversion factor
+            traveled_distance = vertical_distance * cm_per_pixel
+
+            # Update handlebar traveled distance, simulating "up and down" behavior
+            new_distance = handlebar_traveled_distance[-1] + traveled_distance
+            handlebar_traveled_distance.append(max(0, new_distance))  # Ensure the distance doesn't go below zero
+
+        last_handlebar_position = current_handlebar_position
 
     return marker_positions, frame
-
-
 
 # ==========================
 # Functions for Measurement Loop
@@ -172,11 +165,13 @@ def update_marker_status(marker_positions):
     hip_status.config(text="Hüfte: Erkannt" if 1 in marker_positions else "Hüfte: Nicht erkannt")
     knee_status.config(text="Knie: Erkannt" if 12 in marker_positions else "Knie: Nicht erkannt")
     ankle_status.config(text="Sprunggelenk: Erkannt" if 123 in marker_positions else "Sprunggelenk: Nicht erkannt")
+    handlebar_status.config(text="Handlebar: Erkannt" if 2 in marker_positions else "Handlebar: Nicht erkannt")
 
-    if 1 in marker_positions and 12 in marker_positions and 123 in marker_positions:
+    if 1 in marker_positions and 12 in marker_positions and 123 in marker_positions and 2 in marker_positions:
         all_markers_status.config(text="Alle Marker erkannt!", foreground="green")
     else:
         all_markers_status.config(text="Warte auf Marker...", foreground="red")
+
 
 def update_squat_count_label():
     squat_count_label.config(text=f"Squat Count: {squat_count}")
@@ -185,22 +180,21 @@ def update_visualization():
     # Calculate the number of data points to display for the last 5 seconds
     points_to_display = 5 * fps
 
-    '''    
-    # Update Hip Angle plot with the last 5 seconds of data
-    hip_angle_line.set_ydata(data_storage['femur_angle'][-points_to_display:])
-    hip_angle_line.set_xdata(range(len(data_storage['femur_angle'][-points_to_display:])))
-    '''
-    
     # Update Knee Angle plot with the last 5 seconds of data
     knee_angle_line.set_ydata(data_storage['knee_angle'][-points_to_display:])
     knee_angle_line.set_xdata(range(len(data_storage['knee_angle'][-points_to_display:])))
-    
-    # Refresh each subplot
-    ax1.relim()
-    ax1.autoscale_view()
+
     ax2.relim()
     ax2.autoscale_view()
-    
+
+    # Update Handlebar Distance plot
+    ax3.clear()
+    ax3.set_title("Handlebar Distance Over Time")
+    ax3.set_xlabel("Frames")
+    ax3.set_ylabel("Distance (cm)")
+    ax3.plot(handlebar_traveled_distance[-points_to_display:], label="Handlebar Distance", color="green")
+    ax3.legend()
+
     # Redraw the canvas with updated data
     canvas.draw()
 
@@ -209,6 +203,11 @@ def update_visualization():
         femur_angle_label.config(text=f"Femur Angle: {data_storage['femur_angle'][-1]:.2f}°")
     if data_storage['knee_angle']:
         knee_angle_label.config(text=f"Knee Angle: {data_storage['knee_angle'][-1]:.2f}°")
+
+    # Update handlebar distance label
+    if handlebar_traveled_distance:
+        handlebar_distance_label.config(text=f"Handlebar Distance: {handlebar_traveled_distance[-1]:.2f} cm")
+
 
 # ==========================
 # Functions for GUI Controls
@@ -297,33 +296,39 @@ knee_angle_label.grid(row=9, column=0, columnspan=2, pady=5, sticky=(tk.W, tk.E)
 camera_label = tk.Label(root)
 camera_label.grid(row=10, column=0, columnspan=2, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-# Matplotlib Figure for Visualization
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 4))
+handlebar_status = ttk.Label(frame, text="Handlebar: Nicht erkannt")
+handlebar_status.grid(row=10, column=0, columnspan=2, pady=5, sticky=(tk.W, tk.E))
 
-'''
-# Configure the first subplot for femur angle
-ax1.set_ylim(0, 260)
-ax1.set_xlim(0, 150)
-ax1.set_ylabel('Femur Angle (degrees)')
-ax1.set_xlabel('Time (frames)')
-hip_angle_line, = ax1.plot([], [], label='Femur Angle', color='blue')
-ax1.legend()
-'''
+handlebar_distance_label = ttk.Label(frame, text="Handlebar Distance: N/A")
+handlebar_distance_label.grid(row=11, column=0, columnspan=2, pady=5, sticky=(tk.W, tk.E))
+
+# Matplotlib Figure for Visualization (Updated for Handlebar Distance)
+fig, (ax2, ax3) = plt.subplots(2, 1, figsize=(5, 8))
+
+fig.subplots_adjust(hspace=0.5)
 
 # Configure the second subplot for knee angle
-ax2.set_ylim(0, 260)
+ax2.set_ylim(0, 180)
 ax2.set_xlim(0, 150)
 ax2.set_ylabel('Knee Angle (degrees)')
 ax2.set_xlabel('Time (frames)')
 knee_angle_line, = ax2.plot([], [], label='Knee Angle', color='red')
 ax2.legend()
 
+
+# Configure the third subplot for handlebar distance
+ax3.set_ylim(0, 100)  # Adjust the limit based on expected distance
+ax3.set_xlim(0, 150)
+ax3.set_ylabel('Distance (cm)')
+ax3.set_xlabel('Time (frames)')
+ax3.set_title('Handlebar Distance Over Time')
+
 canvas = FigureCanvasTkAgg(fig, master=root)
-canvas.get_tk_widget().grid(row=11, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+canvas.get_tk_widget().grid(row=12, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
 
 # Configure row and column weights to allow dynamic resizing
-root.rowconfigure(10, weight=1)  # Camera frame row
-root.rowconfigure(11, weight=1)  # Plot row
+root.rowconfigure(11, weight=1)  # Camera frame row
+root.rowconfigure(12, weight=1)  # Plot row
 root.columnconfigure(0, weight=1)
 
 root.mainloop()
