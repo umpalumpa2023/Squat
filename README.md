@@ -23,7 +23,7 @@ This Python application tracks squat performance using ArUco markers, analyzing 
 
 ## Marker Setup
 
-1. **Markers**: Use `DICT_4X4_250`, sized **8x8 cm** with a white border.
+1. **Markers**: This script uses ArUco markers from the DICT_4X4_250 dictionary, sized 8x8 cm with a white border for improved detection.
 2. **Positions**: Attach markers securely:
    - **Hip (ID: 1)**: Side of pelvis.
    - **Knee (ID: 12)**: Side of knee.
@@ -55,7 +55,7 @@ This Python application tracks squat performance using ArUco markers, analyzing 
 ---
 
 ## Best Practices
-
+- To prevent wrinkling and improve recognition, print the markers and glue them onto cardboard or another firm, flat surface before attaching them to the body or    handlebar. This ensures that the markers remain stable and easily detectable during movement.
 - Ensure all markers are **visible** and stay within the camera frame.
 - Perform squats fully (femur angle < 90° for a valid count).
 - Use a **simple background** for best detection accuracy.
